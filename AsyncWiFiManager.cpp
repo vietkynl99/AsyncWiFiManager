@@ -11,6 +11,8 @@ bool AsyncWiFiManager::mStartedmDNS = false;
 bool AsyncWiFiManager::mIsAutoConfigPortalEnable = false;
 String AsyncWiFiManager::mMDnsServerName = "";
 Preferences *AsyncWiFiManager::mPreferences = new Preferences();
+void (*AsyncWiFiManager::onStateChanged)(AsyncWiFiState state) = nullptr;
+void (*AsyncWiFiManager::mOnWiFiInformationChanged)() = nullptr;
 
 const char HTML_WIFI_ITEM1[] PROGMEM = "<div><a href='#p' onclick='c(this)'>";
 const char HTML_WIFI_ITEM2[] PROGMEM = "</a><div class='q q-";
@@ -107,6 +109,16 @@ void AsyncWiFiManager::setMDnsServerName(String serverName)
     mMDnsServerName = serverName;
 }
 
+void AsyncWiFiManager::setOnStateChanged(void (*callback)(AsyncWiFiState state))
+{
+    onStateChanged = callback;
+}
+
+void AsyncWiFiManager::setOnWiFiInformationChanged(void (*callback)())
+{
+    mOnWiFiInformationChanged = callback;
+}
+
 int AsyncWiFiManager::getState()
 {
     return mState;
@@ -137,6 +149,10 @@ void AsyncWiFiManager::setState(int state)
     {
         mState = state;
         LOG("State changed to %s", getStateStr().c_str());
+        if (onStateChanged)
+        {
+            onStateChanged((AsyncWiFiState)state);
+        }
     }
 }
 
@@ -471,8 +487,15 @@ void AsyncWiFiManager::saveDataHandler()
         mServer->send(200, "text/html", html);
 
         saveSettings();
-        delay(500);
-        ESP.restart();
+        if (mOnWiFiInformationChanged)
+        {
+            mOnWiFiInformationChanged();
+        }
+        else
+        {
+            delay(1000);
+            ESP.restart();
+        }
     }
     else
     {

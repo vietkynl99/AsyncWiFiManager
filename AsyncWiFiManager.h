@@ -32,6 +32,8 @@ private:
     static bool mIsAutoConfigPortalEnable;
     static String mMDnsServerName;
     static Preferences *mPreferences;
+    static void (*onStateChanged)(AsyncWiFiState state);
+    static void (*mOnWiFiInformationChanged)();
 
 public:
     static void begin();
@@ -45,6 +47,9 @@ public:
     static void setAPInformation(String ssid, String password);
     static void setAutoConfigPortalEnable(bool enabled);
     static void setMDnsServerName(String serverName);
+
+    static void setOnStateChanged(void (*callback)(AsyncWiFiState state));
+    static void setOnWiFiInformationChanged(void (*callback)());
 
     static void printScannedNetWorks();
     static int getState();
