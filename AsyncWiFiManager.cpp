@@ -713,15 +713,7 @@ bool AsyncWiFiManager::writeFile(const char *path, String &content)
         LOGE("Failed to open file %s for writing", path);
         return false;
     }
-    bool ret = false;
-    if (file.print(content))
-    {
-        ret = true;
-    }
-    else
-    {
-        LOGE("Write to %s failed", path);
-    }
+    file.print(content);
     file.close();
-    return ret;
+    return true;
 }
