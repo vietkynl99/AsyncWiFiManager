@@ -1,13 +1,25 @@
 #pragma once
 
 #include <Arduino.h>
+#include <LittleFS.h>
+
+#ifdef ESP8266
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <ESP8266WebServer.h>
+#include <ESP8266mDNS.h>
+
+#define WebServerClass ESP8266WebServer
+#else
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <WiFiAP.h>
 #include <WiFiUdp.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
-#include <Preferences.h>
+
+#define WebServerClass WebServer
+#endif
 
 enum AsyncWiFiState
 {
@@ -26,12 +38,11 @@ private:
     static String mAPSSID;
     static String mAPPassword;
     static int mState;
-    static WebServer *mServer;
+    static WebServerClass *mServer;
     static bool mStartedmDNS;
     static bool mIsScanning;
     static bool mIsAutoConfigPortalEnable;
     static String mMDnsServerName;
-    static Preferences *mPreferences;
     static void (*onStateChanged)(AsyncWiFiState state);
     static void (*mOnWiFiInformationChanged)();
 
@@ -81,9 +92,10 @@ private:
 
     static void processHandler();
 
-    static void putString(const char *name, const char *key, String value);
-    static String getString(const char *name, const char *key, String defaultValue = "");
-
     static int getRssiLevel(int rssi);
     static void trim(String &str);
+
+    static void initFS();
+    static bool readFile(const char *path, String &content);
+    static bool writeFile(const char *path, String &content);
 };

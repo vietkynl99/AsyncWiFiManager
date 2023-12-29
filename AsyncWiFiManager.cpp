@@ -6,11 +6,10 @@ String AsyncWiFiManager::mSavedPassword = "";
 String AsyncWiFiManager::mAPSSID = "";
 String AsyncWiFiManager::mAPPassword = "";
 int AsyncWiFiManager::mState = ASYNC_WIFI_STATE_NONE;
-WebServer *AsyncWiFiManager::mServer = nullptr;
+WebServerClass *AsyncWiFiManager::mServer = nullptr;
 bool AsyncWiFiManager::mStartedmDNS = false;
 bool AsyncWiFiManager::mIsAutoConfigPortalEnable = false;
 String AsyncWiFiManager::mMDnsServerName = "";
-Preferences *AsyncWiFiManager::mPreferences = new Preferences();
 void (*AsyncWiFiManager::onStateChanged)(AsyncWiFiState state) = nullptr;
 void (*AsyncWiFiManager::mOnWiFiInformationChanged)() = nullptr;
 
@@ -42,7 +41,8 @@ const char HTML_NO_NETWORKS_FOUND[] PROGMEM = "<label>No networks found</label><
 #define LOGE(...)
 #endif
 
-#define PREFERENCES_NAME "WIFI"
+#define FS LittleFS
+#define FORMAT_FS_IF_FAILED true
 
 #define CONNECT_WIFI_TIMEOUT 30000UL   // (ms)
 #define CONFIG_PORTAL_TIMEOUT 120000UL // (ms)
@@ -55,6 +55,7 @@ bool AsyncWiFiManager::mIsScanning = false;
 
 void AsyncWiFiManager::begin()
 {
+    initFS();
     setState(ASYNC_WIFI_STATE_NONE);
     readSavedSettings();
     if (!isValidWifiSettings())
@@ -74,6 +75,12 @@ void AsyncWiFiManager::loop()
     {
         mServer->handleClient();
     }
+#ifdef ESP8266
+    if (mStartedmDNS)
+    {
+        MDNS.update();
+    }
+#endif
     processHandler();
 }
 
@@ -191,6 +198,23 @@ void AsyncWiFiManager::stopScanNetworks()
 
 String AsyncWiFiManager::getEncryptionTypeStr(uint8_t encType)
 {
+#ifdef ESP8266
+    switch (encType)
+    {
+    case AUTH_OPEN:
+        return "open";
+    case AUTH_WEP:
+        return "WEP";
+    case AUTH_WPA_PSK:
+        return "WPA";
+    case AUTH_WPA2_PSK:
+        return "WPA2";
+    case AUTH_WPA_WPA2_PSK:
+        return "WPA+WPA2";
+    default:
+        return "unknown";
+    }
+#else
     switch (encType)
     {
     case WIFI_AUTH_OPEN:
@@ -214,19 +238,31 @@ String AsyncWiFiManager::getEncryptionTypeStr(uint8_t encType)
     default:
         return "unknown";
     }
+#endif
 }
 
 void AsyncWiFiManager::printScannedNetWorks()
 {
-    int i = 0;
+    uint8_t i = 0;
     String ssid;
     uint8_t encType;
     int32_t rssi;
     uint8_t *bssid;
     int32_t channel;
+    bool hidden = false;
 
-    while (WiFi.getNetworkInfo(i, ssid, encType, rssi, bssid, channel))
+    int n = WiFi.scanComplete();
+
+#ifdef ESP8266
+    while (i < n && WiFi.getNetworkInfo(i, ssid, encType, rssi, bssid, channel, hidden))
+#else
+    while (i < n && WiFi.getNetworkInfo(i, ssid, encType, rssi, bssid, channel))
+#endif
     {
+        if (hidden)
+        {
+            continue;
+        }
         LOG("%2d. %-24s %4ddBm | %s", i + 1, ssid.c_str(), rssi, getEncryptionTypeStr(encType).c_str());
         i++;
     }
@@ -240,15 +276,32 @@ bool AsyncWiFiManager::getScannedWifiHtmlStr(String &str)
     int32_t rssi;
     uint8_t *bssid;
     int32_t channel;
+    bool hidden = false;
     bool ret = false;
 
-    while (WiFi.getNetworkInfo(i, ssid, encType, rssi, bssid, channel))
+    int n = WiFi.scanComplete();
+
+#ifdef ESP8266
+    while (i < n && WiFi.getNetworkInfo(i, ssid, encType, rssi, bssid, channel, hidden))
+#else
+    while (i < n && WiFi.getNetworkInfo(i, ssid, encType, rssi, bssid, channel))
+#endif
     {
+        if (hidden)
+        {
+            continue;
+        }
+        LOG("%2d. %-24s %4ddBm | %s", i + 1, ssid.c_str(), rssi, getEncryptionTypeStr(encType).c_str());
+
         str += FPSTR(HTML_WIFI_ITEM1);
         str += ssid;
         str += FPSTR(HTML_WIFI_ITEM2);
         str += String(getRssiLevel(rssi));
+#ifdef ESP8266
+        if (encType != AUTH_OPEN)
+#else
         if (encType != WIFI_AUTH_OPEN)
+#endif
         {
             str += FPSTR(HTML_WIFI_LOCK);
         }
@@ -267,15 +320,21 @@ bool AsyncWiFiManager::isValidWifiSettings()
 
 void AsyncWiFiManager::readSavedSettings()
 {
-    mSavedSSID = getString(PREFERENCES_NAME, "ssid");
-    mSavedPassword = getString(PREFERENCES_NAME, "password");
+    if (!readFile("/ssid.txt", mSavedSSID) || !readFile("/pass.txt", mSavedPassword))
+    {
+        LOGE("Failed to read settings");
+        mSavedSSID = "";
+        mSavedPassword = "";
+    }
 }
 
 void AsyncWiFiManager::saveSettings()
 {
-    putString(PREFERENCES_NAME, "ssid", mSavedSSID);
-    putString(PREFERENCES_NAME, "password", mSavedPassword);
-    if (mSavedSSID.length() > 0)
+    if (!writeFile("/ssid.txt", mSavedSSID) || !writeFile("/pass.txt", mSavedPassword))
+    {
+        LOGE("Failed to save settings");
+    }
+    else if (mSavedSSID.length() > 0)
     {
         LOG("Saved WiFi: %s", mSavedSSID.c_str());
     }
@@ -331,7 +390,7 @@ void AsyncWiFiManager::startServer()
     if (!mServer)
     {
         LOG("Start server");
-        mServer = new WebServer(80);
+        mServer = new WebServerClass(80);
         mServer->onNotFound(notFoundHandler);
         mServer->on("/", rootHandler);
         mServer->on("/save", saveDataHandler);
@@ -355,8 +414,10 @@ void AsyncWiFiManager::startMDNS()
     if (!mStartedmDNS && mMDnsServerName.length() > 0 && MDNS.begin(mMDnsServerName))
     {
         mStartedmDNS = true;
+#ifdef ESP8266
+        MDNS.addService("http", "tcp", 80);
+#endif
         LOG("mDNS responder started at http://%s.local", mMDnsServerName.c_str());
-        // MDNS.addService("http", "tcp", 80);
     }
 }
 
@@ -586,23 +647,6 @@ void AsyncWiFiManager::processHandler()
     }
 }
 
-void AsyncWiFiManager::putString(const char *name, const char *key, String value)
-{
-    LOG("Saved %s", key);
-    mPreferences->begin(name, false);
-    mPreferences->putString(key, value);
-    mPreferences->end();
-}
-
-String AsyncWiFiManager::getString(const char *name, const char *key, String defaultValue)
-{
-    String ret = "";
-    mPreferences->begin(name, false);
-    ret = mPreferences->getString(key, defaultValue);
-    mPreferences->end();
-    return ret;
-}
-
 void AsyncWiFiManager::trim(String &str)
 {
     while (str.length() > 0 && (str.indexOf(' ') == 0 || str.indexOf('\r') == 0 || str.indexOf('\n') == 0))
@@ -631,4 +675,53 @@ int AsyncWiFiManager::getRssiLevel(int rssi)
         level = map(rssi, -90, -30, 0, 4);
     }
     return level;
+}
+
+void AsyncWiFiManager::initFS()
+{
+#ifdef ESP8266
+    if (!FS.begin())
+    {
+        LOGE("FS Mount Failed");
+    }
+#else
+    if (!FS.begin(FORMAT_FS_IF_FAILED))
+    {
+        LOGE("FS Mount Failed");
+    }
+#endif
+}
+
+bool AsyncWiFiManager::readFile(const char *path, String &content)
+{
+    fs::File file = FS.open(path, "r");
+    if (!file || file.isDirectory())
+    {
+        LOGE("Failed to open file %s for reading", path);
+        return false;
+    }
+    content = file.readString();
+    file.close();
+    return true;
+}
+
+bool AsyncWiFiManager::writeFile(const char *path, String &content)
+{
+    fs::File file = FS.open(path, "w");
+    if (!file)
+    {
+        LOGE("Failed to open file %s for writing", path);
+        return false;
+    }
+    bool ret = false;
+    if (file.print(content))
+    {
+        ret = true;
+    }
+    else
+    {
+        LOGE("Write to %s failed", path);
+    }
+    file.close();
+    return ret;
 }
