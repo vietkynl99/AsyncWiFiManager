@@ -91,6 +91,17 @@ void AsyncWiFiManager::resetSettings()
     // ESP.restart();
 }
 
+void AsyncWiFiManager::turnOff()
+{
+    LOG("Stop all");
+    stopConnectToSavedWifi();
+    stopConfigPortal();
+    stopServer();
+    stopMDNS();
+    setState(ASYNC_WIFI_STATE_NONE);
+    WiFi.mode(WIFI_OFF);
+}
+
 // This function should not be used unless debugging. The device needs to restart after using it.
 void AsyncWiFiManager::setWifiInformation(String ssid, String password)
 {
@@ -679,6 +690,13 @@ int AsyncWiFiManager::getRssiLevel(int rssi)
 
 void AsyncWiFiManager::initFS()
 {
+    static bool initialized = false;
+
+    if (initialized)
+    {
+        return;
+    }
+    initialized = true;
 #ifdef ESP8266
     if (!FS.begin())
     {

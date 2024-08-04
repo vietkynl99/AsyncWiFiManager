@@ -50,6 +50,7 @@ public:
     static void begin();
     static void loop();
     static void resetSettings();
+    static void turnOff();
 
     // Only used for debugging.The device needs to restart after using it.
     static void setWifiInformation(String ssid, String password);
