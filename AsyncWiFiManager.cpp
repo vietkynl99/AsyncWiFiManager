@@ -578,24 +578,14 @@ void AsyncWiFiManager::saveDataHandler()
 void AsyncWiFiManager::processHandler()
 {
     static int prevState = ASYNC_WIFI_STATE_NONE;
-    static bool prevConnectStatus = false;
     static int prevWifiCount = -99;
     static unsigned long long timeoutTime = 0, scanTime = 0;
 
-    if (prevConnectStatus != WiFi.isConnected())
+    if (mState == ASYNC_WIFI_STATE_CONNECTED && !WiFi.isConnected())
     {
-        prevConnectStatus = WiFi.isConnected();
-        if (mState == ASYNC_WIFI_STATE_CONNECTED && !WiFi.isConnected())
-        {
-            setState(ASYNC_WIFI_STATE_DISCONNECTED);
-        }
-        else if (mState == ASYNC_WIFI_STATE_DISCONNECTED && WiFi.isConnected())
-        {
-            setState(ASYNC_WIFI_STATE_CONNECTED);
-        }
+        setState(ASYNC_WIFI_STATE_CONNECTING);
     }
-
-    if (mState == ASYNC_WIFI_STATE_CONNECTING && WiFi.isConnected())
+    else if (mState == ASYNC_WIFI_STATE_CONNECTING && WiFi.isConnected())
     {
         setState(ASYNC_WIFI_STATE_CONNECTED);
         stopScanNetworks();
