@@ -579,7 +579,7 @@ void AsyncWiFiManager::processHandler()
 {
     static int prevState = ASYNC_WIFI_STATE_NONE;
     static int prevWifiCount = -99;
-    static unsigned long long timeoutTime = 0, scanTime = 0;
+    static unsigned long long timeoutTime = 0, period = 0, scanTime = 0;
 
     if (mState == ASYNC_WIFI_STATE_CONNECTED && !WiFi.isConnected())
     {
@@ -597,17 +597,20 @@ void AsyncWiFiManager::processHandler()
         prevState = mState;
         if (mState == ASYNC_WIFI_STATE_CONFIG_PORTAL)
         {
-            timeoutTime = millis() + CONFIG_PORTAL_TIMEOUT;
+            timeoutTime = millis();
+            period = CONFIG_PORTAL_TIMEOUT;
         }
         else if (mState == ASYNC_WIFI_STATE_CONNECTING && mIsAutoConfigPortalEnable)
         {
-            timeoutTime = millis() + CONNECT_WIFI_TIMEOUT;
+            timeoutTime = millis();
+            period = CONNECT_WIFI_TIMEOUT;
         }
     }
 
-    if (timeoutTime && !WiFi.isConnected() && millis() > timeoutTime)
+    if (period && !WiFi.isConnected() && (unsigned long)(millis() - timeoutTime) > period)
     {
         timeoutTime = 0;
+        period = 0;
         if (mState == ASYNC_WIFI_STATE_CONFIG_PORTAL)
         {
             LOG("Config portal timeout");
@@ -621,9 +624,9 @@ void AsyncWiFiManager::processHandler()
         }
     }
 
-    if (mIsScanning && millis() > scanTime)
+    if (mIsScanning && (unsigned long)(millis() - scanTime) > 100)
     {
-        scanTime = millis() + 100;
+        scanTime = millis();
         int wifiCount = WiFi.scanComplete();
         if (prevWifiCount != wifiCount)
         {
