@@ -1,6 +1,18 @@
 #include "AsyncWiFiManager.h"
 #include "html/HtmlResource.h"
 
+#define FS LittleFS
+#define FORMAT_FS_IF_FAILED true
+
+#define CONNECT_WIFI_TIMEOUT 30000UL   // (ms)
+#define CONFIG_PORTAL_TIMEOUT 120000UL // (ms)
+
+#define AP_SSID_DEFAULT "ESP AP"
+#define AP_PASSWORD_DEFAULT "12345678"
+#define AP_IP_ADDR IPAddress(192, 168, 4, 1)
+
+unsigned long AsyncWiFiManager::mConnectWifiTimeout = CONNECT_WIFI_TIMEOUT;
+unsigned long AsyncWiFiManager::mConfigPortalTimeout = CONFIG_PORTAL_TIMEOUT;
 String AsyncWiFiManager::mSavedSSID = "";
 String AsyncWiFiManager::mSavedPassword = "";
 String AsyncWiFiManager::mAPSSID = "";
@@ -40,16 +52,6 @@ const char HTML_NO_NETWORKS_FOUND[] PROGMEM = "<label>No networks found</label><
 #define LOG(...)
 #define LOGE(...)
 #endif
-
-#define FS LittleFS
-#define FORMAT_FS_IF_FAILED true
-
-#define CONNECT_WIFI_TIMEOUT 30000UL   // (ms)
-#define CONFIG_PORTAL_TIMEOUT 120000UL // (ms)
-
-#define AP_SSID_DEFAULT "ESP AP"
-#define AP_PASSWORD_DEFAULT "12345678"
-#define AP_IP_ADDR IPAddress(192, 168, 4, 1)
 
 bool AsyncWiFiManager::mIsScanning = false;
 
@@ -125,6 +127,22 @@ void AsyncWiFiManager::setAutoConfigPortalEnable(bool enabled)
 void AsyncWiFiManager::setMDnsServerName(String serverName)
 {
     mMDnsServerName = serverName;
+}
+
+void AsyncWiFiManager::setConnectWifiTimeout(unsigned int timeout)
+{
+    if (timeout > 0)
+    {
+        mConnectWifiTimeout = timeout;
+    }
+}
+
+void AsyncWiFiManager::setConfigPortalTimeout(unsigned int timeout)
+{
+    if (timeout > 0)
+    {
+        mConfigPortalTimeout = timeout;
+    }
 }
 
 void AsyncWiFiManager::setOnStateChanged(void (*callback)(AsyncWiFiState state))
@@ -598,12 +616,12 @@ void AsyncWiFiManager::processHandler()
         if (mState == ASYNC_WIFI_STATE_CONFIG_PORTAL)
         {
             timeoutTime = millis();
-            period = CONFIG_PORTAL_TIMEOUT;
+            period = mConfigPortalTimeout;
         }
         else if (mState == ASYNC_WIFI_STATE_CONNECTING && mIsAutoConfigPortalEnable)
         {
             timeoutTime = millis();
-            period = CONNECT_WIFI_TIMEOUT;
+            period = mConnectWifiTimeout;
         }
     }
 

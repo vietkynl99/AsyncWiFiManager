@@ -33,6 +33,8 @@ enum AsyncWiFiState
 class AsyncWiFiManager
 {
 private:
+    static unsigned long mConnectWifiTimeout;
+    static unsigned long mConfigPortalTimeout;
     static String mSavedSSID;
     static String mSavedPassword;
     static String mAPSSID;
@@ -59,6 +61,8 @@ public:
     static void setAPInformation(String ssid, String password);
     static void setAutoConfigPortalEnable(bool enabled);
     static void setMDnsServerName(String serverName);
+    static void setConnectWifiTimeout(unsigned int timeout);
+    static void setConfigPortalTimeout(unsigned int timeout);
 
     static void setOnStateChanged(void (*callback)(AsyncWiFiState state));
     static void setOnWiFiInformationChanged(void (*callback)());
